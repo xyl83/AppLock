@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+app/build/
+gradle-app.setting
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Android Studio 生成物
+local.properties
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker（已弃用）
+Dockerfile
+build_apk.bat

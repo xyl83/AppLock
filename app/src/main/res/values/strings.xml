@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">自律应用锁</string>
+    <string name="accessibility_description">用于监测前台应用并拦截被锁定的应用，保护您的自律时间。</string>
+</resources>
