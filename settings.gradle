@@ -1,20 +1,23 @@
 pluginManagement {
-   repositories {
-        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-        maven { url 'https://maven.aliyun.com/repository/public' }
+    repositories {
+        // 官方仓库优先：GitHub Actions 运行在海外，官方源最快且稳定
         google()
         mavenCentral()
         gradlePluginPortal()
+        // 国内网络兜底镜像（官方仓库已命中时不会访问这里）
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
     }
 }
 
 dependencyResolutionManagement {
-   repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        maven { url 'https://maven.aliyun.com/repository/public' }
-        maven { url 'https://maven.aliyun.com/repository/google' }
         google()
         mavenCentral()
+        // 国内网络兜底镜像
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
     }
 }
 
