@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,6 +48,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,12 +56,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -74,6 +80,9 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var prefs: PrefsManager
 
+    // 每次回到前台递增，驱动权限页重新检测权限状态
+    private var resumeTick by mutableIntStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = PrefsManager(this)
@@ -81,7 +90,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    MainContent(prefs = prefs)
+                    MainContent(prefs = prefs, resumeTick = resumeTick)
                 }
             }
         }
@@ -89,7 +98,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 用于在权限页返回后刷新
+        // 用户从系统设置授权页返回时触发刷新，避免页面还显示"未开启"
+        resumeTick++
     }
 }
 
@@ -105,7 +115,7 @@ private enum class TabItem(val title: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MainContent(prefs: PrefsManager) {
+private fun MainContent(prefs: PrefsManager, resumeTick: Int) {
     var selectedTab by remember { mutableStateOf(TabItem.PASSWORD) }
     val tabs = TabItem.values()
 
@@ -131,7 +141,7 @@ private fun MainContent(prefs: PrefsManager) {
                     TabItem.ADVICE -> AdviceTab(prefs)
                     TabItem.LOCK -> LockDurationTab(prefs)
                     TabItem.APPS -> AppSelectTab(prefs)
-                    TabItem.PERMISSION -> PermissionTab(prefs)
+                    TabItem.PERMISSION -> PermissionTab(prefs, resumeTick)
                 }
             }
         }
@@ -471,7 +481,7 @@ private fun LockDurationTab(prefs: PrefsManager) {
 
 @Composable
 private fun AppSelectTab(prefs: PrefsManager) {
-    data class AppInfo(val pkg: String, val label: String)
+    data class AppInfo(val pkg: String, val label: String, val icon: ImageBitmap?)
 
     val context = LocalContext.current
     var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
@@ -485,7 +495,12 @@ private fun AppSelectTab(prefs: PrefsManager) {
             val list = installed.map { app ->
                 AppInfo(
                     pkg = app.packageName,
-                    label = try { pm.getApplicationLabel(app).toString() } catch (_: Exception) { app.packageName }
+                    label = try { pm.getApplicationLabel(app).toString() } catch (_: Exception) { app.packageName },
+                    icon = try {
+                        pm.getApplicationIcon(app).toBitmap(96, 96).asImageBitmap()
+                    } catch (_: Exception) {
+                        null
+                    }
                 )
             }.filter { it.pkg != context.packageName }
                 .sortedBy { it.label.lowercase() }
@@ -555,6 +570,15 @@ private fun AppSelectTab(prefs: PrefsManager) {
                         }
                     )
                     Spacer(modifier = Modifier.width(8.dp))
+                    app.icon?.let { bmp ->
+                        Image(
+                            bitmap = bmp,
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                    }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = app.label, fontSize = 15.sp)
                         Text(text = app.pkg, fontSize = 12.sp, color = Color.Gray)
@@ -576,7 +600,7 @@ private fun AppSelectTab(prefs: PrefsManager) {
 // ============ Tab 5：权限引导 ============
 
 @Composable
-private fun PermissionTab(prefs: PrefsManager) {
+private fun PermissionTab(prefs: PrefsManager, resumeTick: Int) {
     val context = LocalContext.current
 
     fun isAccessibilityEnabled(): Boolean {
@@ -595,8 +619,9 @@ private fun PermissionTab(prefs: PrefsManager) {
 
     var a11yOn by remember { mutableStateOf(isAccessibilityEnabled()) }
     var overlayOn by remember { mutableStateOf(canDrawOverlays()) }
+    var showPrivacy by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(resumeTick) {
         a11yOn = isAccessibilityEnabled()
         overlayOn = canDrawOverlays()
     }
@@ -620,9 +645,6 @@ private fun PermissionTab(prefs: PrefsManager) {
             isOn = a11yOn,
             isRequired = true,
             actionLabel = if (a11yOn) "已开启" else "前往开启",
-            onAction = {
-                a11yOn = isAccessibilityEnabled()
-            },
             intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         )
 
@@ -633,9 +655,6 @@ private fun PermissionTab(prefs: PrefsManager) {
             isOn = overlayOn,
             isRequired = true,
             actionLabel = if (overlayOn) "已开启" else "前往开启",
-            onAction = {
-                overlayOn = canDrawOverlays()
-            },
             intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
                 Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
             else null
@@ -680,6 +699,44 @@ private fun PermissionTab(prefs: PrefsManager) {
                 )
             }
         }
+
+        // 上架审核需要的隐私政策与权限说明入口
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "隐私政策与权限说明",
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "本应用纯本地运行，不联网、无广告、不收集任何个人数据。",
+                    color = Color(0xFF555555),
+                    fontSize = 13.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(
+                    onClick = { showPrivacy = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("查看完整隐私政策")
+                }
+            }
+        }
+    }
+
+    if (showPrivacy) {
+        AlertDialog(
+            onDismissRequest = { showPrivacy = false },
+            title = { Text("隐私政策与权限说明") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(text = PRIVACY_TEXT, fontSize = 13.sp, lineHeight = 20.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPrivacy = false }) { Text("我已了解") }
+            }
+        )
     }
 }
 
@@ -690,7 +747,6 @@ private fun PermissionCard(
     isOn: Boolean,
     isRequired: Boolean,
     actionLabel: String,
-    onAction: () -> Unit,
     intent: Intent?
 ) {
     val context = LocalContext.current
@@ -727,3 +783,26 @@ private fun PermissionCard(
         }
     }
 }
+
+// ============ 隐私政策文本 ============
+
+private const val PRIVACY_TEXT =
+    "本应用是一款纯本地的自律工具，不联网、无广告、无任何第三方统计或广告 SDK，不会将任何信息上传至服务器。\n\n" +
+        "一、本地保存的数据\n" +
+        "1. 解锁密码：仅保存 SHA-256 哈希值，不保存明文\n" +
+        "2. 您编辑的忠告文本\n" +
+        "3. 您勾选锁定的应用包名\n" +
+        "4. 锁定时长、截止时间与密码提交次数\n" +
+        "在系统设置中清除应用数据或卸载应用，上述数据即全部删除。\n\n" +
+        "二、读取已安装应用列表（QUERY_ALL_PACKAGES）\n" +
+        "仅用于在“应用选择”页面展示可勾选的应用，全部在本机处理，不上传、不共享。\n\n" +
+        "三、无障碍服务（AccessibilityService）\n" +
+        "用途：识别当前前台应用的包名，当您打开已勾选锁定的应用时展示密码验证页面。\n" +
+        "范围：仅读取窗口变化事件中的包名，不读取、不记录、不上传任何界面内容或输入内容。\n" +
+        "您可随时在系统设置中关闭该服务，关闭后应用锁定功能将失效。\n\n" +
+        "四、悬浮窗权限（SYSTEM_ALERT_WINDOW）\n" +
+        "用于在被锁定的应用之上显示密码验证页面。\n\n" +
+        "五、儿童\n" +
+        "本应用不面向 14 周岁以下儿童，也不会主动收集儿童个人信息。\n\n" +
+        "六、联系方式\n" +
+        "如对本政策有疑问，可通过应用商店页面所列的开发者联系方式与我们联系。"

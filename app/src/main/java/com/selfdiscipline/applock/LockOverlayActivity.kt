@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +55,10 @@ class LockOverlayActivity : ComponentActivity() {
     private lateinit var prefs: PrefsManager
     private var deadlineCheckJob: Job? = null
 
+    private val targetPackage: String? by lazy {
+        intent.getStringExtra(EXTRA_TARGET_PACKAGE)
+    }
+
     companion object {
         const val EXTRA_TARGET_PACKAGE = "target_pkg"
     }
@@ -78,6 +83,13 @@ class LockOverlayActivity : ComponentActivity() {
             )
         window.statusBarColor = Color.TRANSPARENT
 
+        // 拦截返回键：必须输对密码才放行（Android 13+ 预测性返回已在 Manifest 关闭）
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // 吞掉返回事件，停留在密码页
+            }
+        })
+
         startDeadlineChecker()
 
         setContent {
@@ -88,7 +100,7 @@ class LockOverlayActivity : ComponentActivity() {
                 ) {
                     LockScreenContent(
                         prefs = prefs,
-                        onUnlockSuccess = { finish() }
+                        onUnlockSuccess = { grantUnlockAndFinish() }
                     )
                 }
             }
@@ -127,9 +139,13 @@ class LockOverlayActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    override fun onBackPressed() {
-        // 不响应返回键，强制输入密码
-        // （用户已知晓：这不是防盗锁，无障碍重新检测会再次拉起）
+    /**
+     * 密码验证通过：先登记本次放行的包名，再关闭拦截页。
+     * 否则关闭后无障碍服务会立刻重新收到被锁应用的窗口事件并再次拉起本页。
+     */
+    private fun grantUnlockAndFinish() {
+        targetPackage?.let { prefs.grantUnlockFor(it) }
+        finish()
     }
 }
 

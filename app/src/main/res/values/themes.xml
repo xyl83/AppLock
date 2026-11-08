@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 主界面主题：只用系统确定存在的父主题，配色由 Compose 控制 -->
+    <style name="Theme.AppLock" parent="@android:style/Theme.DeviceDefault.NoActionBar" />
+
+    <!-- 拦截页主题：全屏效果由代码里的沉浸式 Flags 控制，不依赖系统 Fullscreen 变体 -->
+    <style name="Theme.AppLock.Fullscreen" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/lock_background</item>
+    </style>
+</resources>

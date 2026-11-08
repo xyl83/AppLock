@@ -37,6 +37,9 @@ class PrefsManager(context: Context) {
         // 忠告轮询索引
         private const val KEY_ADVICE_INDEX = "advice_index"
 
+        // 当前已放行的包名（解锁后避免被重复拦截）
+        private const val KEY_UNLOCKED_PACKAGE = "unlocked_pkg"
+
         const val MAX_ATTEMPTS = 10
 
         private val DEFAULT_ADVICES = listOf(
@@ -175,5 +178,24 @@ class PrefsManager(context: Context) {
 
     fun resetAttemptCount() {
         sp.edit().putInt(KEY_ATTEMPT_COUNT, 0).apply()
+    }
+
+    // ==================== 当前已解锁的包（防止解锁后被再次拦截） ====================
+
+    /**
+     * 密码验证通过后记录"本次已放行的包名"。
+     * 无障碍服务读到该包处于前台时直接放行，避免解锁后立刻又被拉起密码页。
+     */
+    fun grantUnlockFor(pkg: String) {
+        sp.edit().putString(KEY_UNLOCKED_PACKAGE, pkg).apply()
+    }
+
+    fun getUnlockedPackage(): String? = sp.getString(KEY_UNLOCKED_PACKAGE, null)
+
+    /**
+     * 前台切换到别的应用时撤销放行，用户下次重新进入被锁应用需要重新输密码。
+     */
+    fun revokeUnlock() {
+        sp.edit().remove(KEY_UNLOCKED_PACKAGE).apply()
     }
 }

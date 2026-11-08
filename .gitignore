@@ -14,6 +14,11 @@ gradle-app.setting
 # Android Studio 生成物
 local.properties
 
+# 正式签名密钥（切勿入库）
+keystore.properties
+*.jks
+*.keystore
+
 # OS
 .DS_Store
 Thumbs.db
